@@ -1,0 +1,57 @@
+# Configuration file for the classifier experiment
+
+project:
+  name: covid_xray_clf
+
+model:
+  base_model_name: &model_name mobilenet_v2
+  dropout: 0.2
+  fine_tune_at: 100
+  num_channels: 3
+
+# Data
+# Data take from:
+#   Sultana A et al. A Real Time Method for Distinguishing COVID-19 Utilizing 2D-CNN 
+#   and Transfer Learning. Sensors. 2023; 23(9):4458. https://doi.org/10.3390/s23094458 
+data:
+  path: ../../../Data/COVID-19_CXR_Dataset_final
+  val_split: 0.2
+  test_split: 2
+  augmentation:
+    rotation: 0.2
+    flip: 'horizontal'
+    height_shift_range: 0.1
+    shear_range: 0.1
+    zoom_range: 0.1
+    horizontal_flip: True
+    fill_mode: nearest
+  img_height: 64
+  img_width: 64
+  color: grayscale
+  cache: False
+  prefetch: True
+  shuffle: 1000
+
+train:
+  # Parameters
+  batch_size: 16
+  lr: 0.0001
+  optimizer: adam
+  loss: categorical_crossentropy
+  metrics: 
+  - 'accuracy'
+  epochs: 2
+  epochs_finetune: 2
+  fine_tune_at_perc: 0    # Default: 0, no fine-tuning
+  lr_finetune: 0.00001
+  mode_display: False
+
+general:
+  display: True
+  ai_framework: tf
+
+runs:
+  description:
+  name: !join [ 'test' , '_', *model_name ]
+
+  

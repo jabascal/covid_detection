@@ -1,0 +1,5 @@
+tensorflow-cpu
+matplotlib
+Pillow
+pydot
+PyYAML
