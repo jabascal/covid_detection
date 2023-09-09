@@ -8,6 +8,7 @@ model:
   dropout: 0.2
   fine_tune_at: 100
   num_channels: 3
+  path_save: ../../Models
 
 # Data
 # Data take from:
@@ -29,7 +30,7 @@ data:
   img_height: 299
   img_width: 299
   color: grayscale
-  cache: False
+  cache: True
   prefetch: True
   shuffle: 1000
 
@@ -46,6 +47,27 @@ train:
   fine_tune_at_perc: 80    # Default: 0, no fine-tuning
   lr_finetune: 0.00001
   mode_display: False
+
+tb:
+  # Tensorboard logs
+  log_dir: tb_logs
+  histogram_freq: 1
+  profile_batch: 2
+  # Early stopping
+  early_stopping:
+    monitor: val_loss
+    patience: 5
+  # Model checkpoint
+  model_ckpt:
+    ckpt_freq: 5
+    ckpt_path: ckpts
+    ckpt_monitor: val_accuracy
+  # Reduce learning rate
+  reduce_lr:
+    monitor: val_loss
+    factor: 0.2
+    patience: 5
+    min_lr: 0.000001   
 
 general:
   display: True

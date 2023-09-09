@@ -3,3 +3,4 @@ matplotlib
 Pillow
 pydot
 PyYAML
+mlflow

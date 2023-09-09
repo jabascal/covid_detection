@@ -1,8 +1,9 @@
+import os
+import pickle
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
 from utils.helper_plot import plot_grid_images_from_array
-from utils.helper_data_anal import inspect_data_plot, inspect_images_size
 from utils.helper_plot import plot_loss_acc
 
 def get_prep_input_layer(model_name: str) -> tf.keras.layers:
@@ -248,39 +249,108 @@ def evaluate_model(model: tf.keras.Model,
                                 imgs_titles=imgs_titles)
     return test_loss, test_acc
 
-def train_finetune_clf(data_dir: str,
-                       img_width: int,
-                       img_height: int,
-                       batch_size: int,
-                       validation_split: float = 0.2,   # Percentage
-                       test_split: int = 2,             # Ratio
-                       color_mode: str = "grayscale",   # Images: "grayscale", "rgb" 
-                       augmentation_param: dict = {'flip': 'horizontal', 'rotation': 0.2},
-                       cache: bool = False,
-                       shuffle: bool = True,
-                       #
-                       base_model_name: str = 'mobilenet_v2',# Pretrained model name
-                       model_num_channels: int=3,       # Number of channels for the model
-                       dropout: float = 0.2,            # Dropout rate
-                       #
-                       initial_epochs: int = 20,        # Train the top layers for this number of epochs
-                       fine_tune_at_perc: int = 0.75,         # Fine-tune from this layer onwards (in percentage)
-                       base_learning_rate: float = 0.0001,
-                       fine_tune_epochs: int = 10,
-                       ft_learning_rate: float = 0.00001,
-                       metrics: list = ['accuracy'],
-                       mode_display: bool=False,
-                       ):
+def get_callbacks(
+        # Tensorboard cb
+        log_dir='tb_logs',
+        histogram_freq=1,
+        profile_batch=None, # 2
+        # Early stopping cb
+        early_stopping_patience=5,
+        early_stopping_monitor='val_loss',
+        # Checkpoint cb
+        ckpt_freq=0, # 5
+        ckpt_path_file='tb_logs/ckpts/ckpt-{epoch:04d}.ckpt}',
+        ckpt_monitor='val_accuracy',
+        # Reduce learning rate on plateau cb
+        reduce_lr_patience=5,
+        reduce_lr_min=1e-6,
+        reduce_lr_factor=0.2,
+        reduce_lr_monitor='val_loss',
+):
+    """Get the callbacks."""
+
+    tb_cb = tf.keras.callbacks.TensorBoard(log_dir=log_dir, 
+                                        histogram_freq=histogram_freq,
+                                        write_graph=True,
+                                        write_images=True,
+                                        profile_batch=profile_batch,)
+    callbacks = [tb_cb]
+
+    # Early stopping
+    if early_stopping_patience > 0:
+        early_stop_cb = tf.keras.callbacks.EarlyStopping(monitor=early_stopping_monitor, patience=early_stopping_patience)
+        callbacks.append(early_stop_cb)
+
+    # Checkpoint
+    if ckpt_freq > 0:            
+        checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(
+            filepath=ckpt_path_file,
+            verbose=1,
+            save_weights_only=True,
+            monitor=ckpt_monitor,
+            save_freq=ckpt_freq,
+            save_best_only=True)
+        callbacks.append(checkpoint_cb)
+
+    # Reduce learning rate on plateau
+    if reduce_lr_patience > 0:
+        reduce_lr_cb = tf.keras.callbacks.ReduceLROnPlateau(monitor=reduce_lr_monitor, 
+                                                            factor=reduce_lr_factor,
+                                                            patience=reduce_lr_patience, 
+                                                            min_lr=reduce_lr_min)
+        callbacks.append(reduce_lr_cb)
+    return callbacks
+
+
+def train_finetune_clf(
+                        # Data
+                        data_dir: str,
+                        img_width: int,
+                        img_height: int,
+                        batch_size: int,
+                        validation_split: float = 0.2,   # Percentage
+                        test_split: int = 2,             # Ratio
+                        color_mode: str = "grayscale",   # Images: "grayscale", "rgb" 
+                        augmentation_param: dict = {'flip': 'horizontal', 'rotation': 0.2},
+                        cache: bool = False,
+                        shuffle: bool = True,
+                        #
+                        # Model
+                        base_model_name: str = 'mobilenet_v2',# Pretrained model name
+                        model_num_channels: int=3,       # Number of channels for the model
+                        dropout: float = 0.2,            # Dropout rate
+                        path_save_model: str = 'models',
+                        #
+                        # Train
+                        initial_epochs: int = 20,        # Train the top layers for this number of epochs
+                        fine_tune_at_perc: int = 0.75,         # Fine-tune from this layer onwards (in percentage)
+                        base_learning_rate: float = 0.0001,
+                        fine_tune_epochs: int = 10,
+                        ft_learning_rate: float = 0.00001,
+                        metrics: list = ['accuracy'],
+                        mode_display: bool=False,
+                        #
+                        # TensorBoard
+                        log_dir='tb_logs',
+                        histogram_freq=1,
+                        profile_batch=None, # 2
+                        # Early stopping cb
+                        early_stopping_patience=5,
+                        early_stopping_monitor='val_loss',
+                        # Checkpoint cb
+                        ckpt_freq=0, # 5
+                        ckpt_path='tb_logs/ckpts',
+                        ckpt_monitor='val_accuracy',
+                        # Reduce learning rate on plateau cb
+                        reduce_lr_patience=5,
+                        reduce_lr_min=1e-6,
+                        reduce_lr_factor=0.2,
+                        reduce_lr_monitor='val_loss',
+    ):
     # Device name
     # tf.test.gpu_device_name()
     print(tf.__version__)
     print(f"Devices names: {device_lib.list_local_devices()}")
-    # ----------------------------------------------------------------------------
-    # Inspect the data
-    files, img_count = inspect_data_plot(data_dir, mode_display=mode_display)
-
-    # Read image size
-    imgs_shape, imgs_height = inspect_images_size(files, mode_display=mode_display)
     # ----------------------------------------------------------------------------
     # Create data set 
     # Split in training and validation batched dataset
@@ -304,6 +374,27 @@ def train_finetune_clf(data_dir: str,
                                 trainable=False,
                                 dropout=dropout)
 
+    # ----------------------------------------------------------------------------
+    # Callbacks
+    callbacks = get_callbacks(log_dir=log_dir, 
+                              histogram_freq=histogram_freq, 
+                              profile_batch=profile_batch,
+                              early_stopping_patience=early_stopping_patience, 
+                              early_stopping_monitor=early_stopping_monitor,
+                              ckpt_freq=ckpt_freq, 
+                              ckpt_path_file=ckpt_path, 
+                              ckpt_monitor=ckpt_monitor,
+                              reduce_lr_patience=reduce_lr_patience, 
+                              reduce_lr_min=reduce_lr_min,
+                              reduce_lr_factor=reduce_lr_factor, 
+                              reduce_lr_monitor=reduce_lr_monitor,)
+
+    # Save the weights using the `checkpoint_path` format
+    # Contain only model's weights
+    ckpt_path_file = os.path.join(ckpt_path, 'ckpt-{epoch:04d}.ckpt')
+    model.save_weights(ckpt_path_file.format(epoch=0))
+
+    # ----------------------------------------------------------------------------    
     # Compile the model
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=base_learning_rate),
                     loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
@@ -317,7 +408,8 @@ def train_finetune_clf(data_dir: str,
 
     history = model.fit(train_ds,
                         epochs=initial_epochs,
-                        validation_data=val_ds)
+                        validation_data=val_ds,
+                        callbacks=callbacks)
 
     # ----------------------------------------------------------------------------
     # Plot results
@@ -358,8 +450,21 @@ def train_finetune_clf(data_dir: str,
         plot_loss_acc(loss, val_loss, acc, val_acc)
         #plt.plot([initial_epochs-1,initial_epochs-1], plt.ylim(), label='Start Fine Tuning')
 
+        history = history_fine
+
     # ---------------------------------------------
     # Evaluate the model
     test_loss, test_acc = evaluate_model(model, test_ds, class_names)
+    # ---------------------------------------------
+    # Save the model weights
+    model.save_weights(os.path.join(path_save_model, 'final_weights'))
 
-    return model, base_model, test_loss, test_acc
+    # Save the entire model as a keras or legacy (SavedModel, HDF5)
+    # tf.keras.models.load_model('my_model.keras')
+    model.save(os.path.join(path_save_model, 'final_model.keras'))
+    # ---------------------------------------------
+    # Save history
+    with open(os.path.join(path_save_model, 'train_history'), 'wb') as f:        
+        pickle.dump(history.history, f)
+
+    return model, history, test_loss, test_acc

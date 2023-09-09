@@ -1,5 +1,6 @@
 """
-Call the function train_finetune_clf() to train and fine-tune a classifier model.
+Train and fine-tune a classifier model on a covid dataset, with experiment tracking using Tensorboard.
+Call the function train_finetune_clf() 
 """
 import argparse
 import random
@@ -20,10 +21,17 @@ print(f'Config file: {args.config}')
 
 # Laod config file
 param = load_config(args.config)
+#----------------------------------------------
+# Rewrite parameters (for tests and hyperparameter tuning)
+param['data']['path'] = '../../../Data/COVID-19_CXR_Dataset_final'
+param['train']['epochs'] = 1
+param['train']['epochs_finetune'] = 1
 # ---------------------------------------------
 # Train and fine-tune a classifier model
 if __name__ == "__main__":
-    train_finetune_clf(data_dir=param['data']['path'],
+    model, history, test_loss, test_acc = train_finetune_clf(
+                        # Data
+                        data_dir=param['data']['path'],
                         img_height=param['data']['img_height'],
                         img_width=param['data']['img_width'],
                         batch_size=param['train']['batch_size'],
@@ -33,11 +41,11 @@ if __name__ == "__main__":
                         augmentation_param=param['data']['augmentation'],
                         cache=param['data']['cache'],
                         shuffle=param['data']['shuffle'],
-                        #
+                        # Model
                         base_model_name=param['model']['base_model_name'],
                         model_num_channels=param['model']['num_channels'],
                         dropout=param['model']['dropout'],
-                        #
+                        # Train
                         initial_epochs=param['train']['epochs'],
                         fine_tune_at_perc=param['train']['fine_tune_at_perc'],
                         base_learning_rate=param['train']['lr'],
@@ -45,4 +53,21 @@ if __name__ == "__main__":
                         ft_learning_rate=param['train']['lr_finetune'],
                         metrics=param['train']['metrics'],
                         mode_display=param['train']['mode_display'],
+                        # Tensorboard
+                        log_dir=param['tb']['log_dir'],
+                        histogram_freq=param['tb']['histogram_freq'],
+                        profile_batch=param['tb']['profile_batch'],
+                        # Early stopping
+                        early_stopping_patience=param['tb']['early_stopping']['patience'],
+                        early_stopping_monitor=param['tb']['early_stopping']['monitor'],
+                        # Model checkpoint
+                        ckpt_freq=param['tb']['model_ckpt']['ckpt_freq'],
+                        ckpt_path=param['tb']['model_ckpt']['ckpt_path'],
+                        ckpt_monitor=param['tb']['model_ckpt']['ckpt_monitor'],
+                        # Reduce learning rate
+                        reduce_lr_monitor=param['tb']['reduce_lr']['monitor'],
+                        reduce_lr_factor=param['tb']['reduce_lr']['factor'],
+                        reduce_lr_patience=param['tb']['reduce_lr']['patience'],
+                        reduce_lr_min=param['tb']['reduce_lr']['min_lr']
     )
+
