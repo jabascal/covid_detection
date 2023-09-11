@@ -3,6 +3,7 @@
 tb_logs/
 *.swp
 models/
+results/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

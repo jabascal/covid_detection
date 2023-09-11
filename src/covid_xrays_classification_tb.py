@@ -4,6 +4,8 @@ Call the function train_finetune_clf()
 """
 import argparse
 import random
+import shutil
+import os
 
 from utils.helper_in_out import load_config
 from utils.helper_tf import train_finetune_clf 
@@ -24,8 +26,8 @@ param = load_config(args.config)
 #----------------------------------------------
 # Rewrite parameters (for tests and hyperparameter tuning)
 param['data']['path'] = '../../../Data/COVID-19_CXR_Dataset_final'
-param['train']['epochs'] = 1
-param['train']['epochs_finetune'] = 1
+param['train']['epochs'] = 2
+param['train']['epochs_finetune'] = 0
 # ---------------------------------------------
 # Train and fine-tune a classifier model
 if __name__ == "__main__":
@@ -45,6 +47,7 @@ if __name__ == "__main__":
                         base_model_name=param['model']['base_model_name'],
                         model_num_channels=param['model']['num_channels'],
                         dropout=param['model']['dropout'],
+                        path_save_model=param['model']['path_save'],
                         # Train
                         initial_epochs=param['train']['epochs'],
                         fine_tune_at_perc=param['train']['fine_tune_at_perc'],
@@ -70,4 +73,8 @@ if __name__ == "__main__":
                         reduce_lr_patience=param['tb']['reduce_lr']['patience'],
                         reduce_lr_min=param['tb']['reduce_lr']['min_lr']
     )
+
+    # Copy config file
+    shutil.copyfile(args.config, os.path.join(param[['tb']['log_dir']], 'config.yaml'))
+
 

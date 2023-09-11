@@ -1,10 +1,15 @@
 import os
+import datetime
 import pickle
+import io
+from matplotlib import pyplot as plt
+
+import sklearn.metrics
 import tensorflow as tf
 from tensorflow.python.client import device_lib
 
 from utils.helper_plot import plot_grid_images_from_array
-from utils.helper_plot import plot_loss_acc
+from utils.helper_plot import plot_loss_acc, plot_confusion_matrix
 
 def get_prep_input_layer(model_name: str) -> tf.keras.layers:
     """Get the preprocess input layer for a given model name."""
@@ -121,11 +126,11 @@ def unfreeze_model(base_model: tf.keras.Model,
 
     return base_model, model
 
-def get_prediction(model: tf.keras.Model, 
+def get_prediction_image(model: tf.keras.Model, 
                    img: tf.Tensor, 
                    class_names: list) -> tuple:
     """
-    Get the prediction from a model.
+    Get the prediction of one tensor image from a model.
         Args:
             model: tf.keras.Model
             img: tf.Tensor of dimension (height, width, channels)
@@ -137,11 +142,11 @@ def get_prediction(model: tf.keras.Model,
     pred_name = class_names[class_idx]
     return pred_name, score[class_idx].numpy()
 
-def get_predictions(model: tf.keras.Model,
+def get_predictions_list(model: tf.keras.Model,
                     imgs: list,
                     class_names: list) -> list:
     """
-    Get the predictions from a model.
+    Get the predictions of a list of tensor images from a model.
         Args:
             model: tf.keras.Model
             imgs: tf.Tensor of dimension (batch_size, height, width, channels)
@@ -149,10 +154,29 @@ def get_predictions(model: tf.keras.Model,
     preds_name = []
     preds_score = []
     for img in imgs:        
-        pred_name, score = get_prediction(model, img, class_names)
+        pred_name, score = get_prediction_image(model, img, class_names)
         preds_name.append(pred_name)
         preds_score.append(score)
     return pred_name, preds_score
+
+
+def get_prediction_batch(model: tf.keras.Model, 
+                   img: tf.Tensor, 
+                   class_names: list) -> tuple:
+    """
+    Get the prediction from a model.
+        Args:
+            model: tf.keras.Model
+            img: tf.Tensor of dimension (height, width, channels)
+    """
+    
+    predictions = model.predict_on_batch(img)
+    score = tf.nn.softmax(predictions)    
+    class_idx = tf.argmax(score, axis=1)
+    class_idx = [i.numpy() for i in class_idx]
+    pred_name = [class_names[i] for i in class_idx]
+    score = [score[i, class_idx[i]].numpy() for i in range(len(class_idx))]
+    return pred_name, score
 
 def create_dataset(data_dir: str,
                    img_width: int,
@@ -243,11 +267,29 @@ def evaluate_model(model: tf.keras.Model,
     # Take first batch and predict
     imgs_test, labels_test = next(iter(test_ds))
 
-    pred_names, pred_scores = get_predictions(model, imgs_test, class_names)
-    imgs_titles = [f"True: {class_names[labels_test[i].numpy()]}, Pred: {pred_names[i]}, Score: {pred_scores[i]:.2f} " for i in range(len(pred_names))]
-    plot_grid_images_from_array(imgs_test.numpy(),
-                                imgs_titles=imgs_titles)
+    pred_names, pred_scores = get_prediction_batch(model, imgs_test, class_names)
+    imgs_titles = [f"True: {class_names[labels_test[i].numpy()]},\n Pred: {pred_names[i]},\n Score: {pred_scores[i]:.1f} " for i in range(len(pred_names))]
+    plot_grid_images_from_array(imgs_test.numpy().astype('uint8'),
+                                imgs_titles=imgs_titles, vmin=0, vmax=1)
     return test_loss, test_acc
+
+def plot_to_image(figure):
+  """Converts the matplotlib plot specified by 'figure' to a PNG image and
+  returns it. The supplied figure is closed and inaccessible after this call.
+  From https://www.tensorflow.org/tensorboard/image_summaries
+  """
+  # Save the plot to a PNG in memory.
+  buf = io.BytesIO()
+  plt.savefig(buf, format='png')
+  # Closing the figure prevents it from being displayed directly inside
+  # the notebook.
+  plt.close(figure)
+  buf.seek(0)
+  # Convert PNG buffer to TF image
+  image = tf.image.decode_png(buf.getvalue(), channels=4)
+  # Add the batch dimension
+  image = tf.expand_dims(image, 0)
+  return image
 
 def get_callbacks(
         # Tensorboard cb
@@ -259,14 +301,17 @@ def get_callbacks(
         early_stopping_monitor='val_loss',
         # Checkpoint cb
         ckpt_freq=0, # 5
-        ckpt_path_file='tb_logs/ckpts/ckpt-{epoch:04d}.ckpt}',
+        ckpt_path='tb_logs/ckpts',
         ckpt_monitor='val_accuracy',
         # Reduce learning rate on plateau cb
         reduce_lr_patience=5,
         reduce_lr_min=1e-6,
         reduce_lr_factor=0.2,
         reduce_lr_monitor='val_loss',
-):
+        # Predict labels images
+        images_val_np=None,
+        names_val=None,
+    ):
     """Get the callbacks."""
 
     tb_cb = tf.keras.callbacks.TensorBoard(log_dir=log_dir, 
@@ -282,6 +327,7 @@ def get_callbacks(
         callbacks.append(early_stop_cb)
 
     # Checkpoint
+    ckpt_path_file = os.path.join(ckpt_path, 'ckpt-{epoch:04d}.ckpt')
     if ckpt_freq > 0:            
         checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(
             filepath=ckpt_path_file,
@@ -299,7 +345,17 @@ def get_callbacks(
                                                             patience=reduce_lr_patience, 
                                                             min_lr=reduce_lr_min)
         callbacks.append(reduce_lr_cb)
-    return callbacks
+
+    # Predict (Denoised) an image every epoch to visualize in tensorboard
+    if images_val_np is not None:
+        # Image writer for test sample
+        file_writer_cm = tf.summary.create_file_writer(log_dir + '/cm')
+
+        figure = plot_grid_images_from_array(images_val_np, names_val, vmin=0, vmax=1)
+        # Log sample data
+        with file_writer_cm.as_default():
+            tf.summary.image("Validation sample", plot_to_image(figure), step=0)
+    return callbacks, file_writer_cm
 
 
 def train_finetune_clf(
@@ -347,6 +403,8 @@ def train_finetune_clf(
                         reduce_lr_factor=0.2,
                         reduce_lr_monitor='val_loss',
     ):
+    """Train and fine-tune a classifier model."""
+
     # Device name
     # tf.test.gpu_device_name()
     print(tf.__version__)
@@ -364,6 +422,15 @@ def train_finetune_clf(
                                                             cache=cache,
                                                             shuffle=shuffle,
                                                             mode_display=mode_display)
+    
+    train_ds = train_ds.take(2)
+    test_ds = test_ds.take(1)
+    val_ds = val_ds.take(2)
+    # ----------------------------------------------------------------------------
+    # Validation sample for tensorboard
+    imgs_val, labels_val = next(iter(val_ds))
+    imgs_val_np = imgs_val.numpy().astype('uint8')
+    names_val = [class_names[i] for i in labels_val.numpy()]
     # ----------------------------------------------------------------------------
     # Create the model
     img_shape = (img_height, img_width, model_num_channels) # Color for model trained on RGB images
@@ -376,18 +443,58 @@ def train_finetune_clf(
 
     # ----------------------------------------------------------------------------
     # Callbacks
-    callbacks = get_callbacks(log_dir=log_dir, 
+    now = datetime.datetime.now().strftime("%Y%m%d-%H%M")
+    callbacks, file_writer_cm = get_callbacks(log_dir=f'{log_dir}/{now}', 
                               histogram_freq=histogram_freq, 
                               profile_batch=profile_batch,
                               early_stopping_patience=early_stopping_patience, 
                               early_stopping_monitor=early_stopping_monitor,
                               ckpt_freq=ckpt_freq, 
-                              ckpt_path_file=ckpt_path, 
+                              ckpt_path=f'{ckpt_path}/{now}', 
                               ckpt_monitor=ckpt_monitor,
                               reduce_lr_patience=reduce_lr_patience, 
                               reduce_lr_min=reduce_lr_min,
                               reduce_lr_factor=reduce_lr_factor, 
-                              reduce_lr_monitor=reduce_lr_monitor,)
+                              reduce_lr_monitor=reduce_lr_monitor,
+                              images_val_np=imgs_val_np,
+                              names_val=names_val)
+
+    def log_pred_image(epoch, logs):
+        pred_names, pred_scores = get_prediction_batch(model, imgs_val, class_names)
+        imgs_titles = [f"True: {names_val[i]},\n Pred: {pred_names[i]},\n Score: {pred_scores[i]:.1f} " for i in range(len(names_val))]
+        figure = plot_grid_images_from_array(imgs_val_np, imgs_titles, vmin=0, vmax=1)
+
+        with file_writer_cm.as_default():
+            tf.summary.image("Predictions on val sample", plot_to_image(figure), step=epoch)                    
+
+
+    """    
+        names_pred, pred_scores = get_prediction_batch(model, imgs_val,class_names)
+        names_titles = [f"True: {names_val},\n Pred: {names_pred[i]},\nScore: {pred_scores[i]:.1f} " for i in range(len(names_val))]
+        figure = plot_grid_images_from_array(imgs_val_np, names_titles, vmin=0, vmax=1)
+    """
+    def log_confusion_matrix(epoch, logs):
+        # Use the model to predict the values from the validation dataset.
+        pred_names, pred_scores = get_prediction_batch(model, imgs_val, class_names)
+
+        # Calculate the confusion matrix.
+        cm = sklearn.metrics.confusion_matrix(names_val, pred_names)
+
+        # Log the confusion matrix as an image summary.
+        figure = plot_confusion_matrix(cm, class_names=class_names)
+        cm_image = plot_to_image(figure)
+
+        # Log the confusion matrix as an image summary.
+        with file_writer_cm.as_default():
+            tf.summary.image("Confusion matrix", cm_image, step=epoch)
+
+    # Callback to predict and log an image
+    pred_im_cb = tf.keras.callbacks.LambdaCallback(on_epoch_end=log_pred_image)
+    callbacks.append(pred_im_cb)
+
+    # Callback to log confusion matrix
+    pred_cf_cb = tf.keras.callbacks.LambdaCallback(on_epoch_end=log_confusion_matrix)
+    callbacks.append(pred_cf_cb)
 
     # Save the weights using the `checkpoint_path` format
     # Contain only model's weights
@@ -466,5 +573,6 @@ def train_finetune_clf(
     # Save history
     with open(os.path.join(path_save_model, 'train_history'), 'wb') as f:        
         pickle.dump(history.history, f)
+    # ---------------------------------------------
 
     return model, history, test_loss, test_acc
