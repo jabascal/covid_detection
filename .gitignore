@@ -4,6 +4,7 @@ tb_logs/
 *.swp
 models/
 results/
+mlruns/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

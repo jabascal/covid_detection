@@ -20,3 +20,11 @@ def load_config(config_file):
         param = yaml.load(stream, Loader=get_loader())
         print(yaml.dump(param))
     return param
+
+def set_params_debug(param):
+    param['data']['cache'] = False
+    param['data']['train_size'] = 2
+    param['data']['val_size'] = 2
+    param['data']['test_size'] = 2    
+    param['train']['epochs'] = 2    
+    return param

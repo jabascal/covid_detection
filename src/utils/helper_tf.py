@@ -3,6 +3,7 @@ import datetime
 import pickle
 import io
 from matplotlib import pyplot as plt
+import shutil
 
 import sklearn.metrics
 import tensorflow as tf
@@ -24,7 +25,6 @@ def get_prep_input_layer(model_name: str) -> tf.keras.layers:
     elif model_name == 'vgg19':
         prep_input_layer = tf.keras.applications.vgg19.preprocess_input
     return prep_input_layer
-
 
 def get_base_model(model_name: str, img_shape: tuple) -> tf.keras.Model:
     """Get the base model for a given model name."""
@@ -370,6 +370,9 @@ def train_finetune_clf(
                         augmentation_param: dict = {'flip': 'horizontal', 'rotation': 0.2},
                         cache: bool = False,
                         shuffle: bool = True,
+                        train_size: int = None,
+                        val_size: int = None,
+                        test_size: int = None,
                         #
                         # Model
                         base_model_name: str = 'mobilenet_v2',# Pretrained model name
@@ -390,18 +393,24 @@ def train_finetune_clf(
                         log_dir='tb_logs',
                         histogram_freq=1,
                         profile_batch=None, # 2
+                        #
                         # Early stopping cb
                         early_stopping_patience=5,
                         early_stopping_monitor='val_loss',
+                        #
                         # Checkpoint cb
                         ckpt_freq=0, # 5
                         ckpt_path='tb_logs/ckpts',
                         ckpt_monitor='val_accuracy',
+                        #
                         # Reduce learning rate on plateau cb
                         reduce_lr_patience=5,
                         reduce_lr_min=1e-6,
                         reduce_lr_factor=0.2,
                         reduce_lr_monitor='val_loss',
+                        #
+                        # Config file
+                        config_file: str = None,
     ):
     """Train and fine-tune a classifier model."""
 
@@ -409,6 +418,10 @@ def train_finetune_clf(
     # tf.test.gpu_device_name()
     print(tf.__version__)
     print(f"Devices names: {device_lib.list_local_devices()}")
+    # ----------------------------------------------------------------------------
+    # Log dir
+    now = datetime.datetime.now().strftime("%Y%m%d-%H%M")
+    log_dir=f'{log_dir}/{now}'
     # ----------------------------------------------------------------------------
     # Create data set 
     # Split in training and validation batched dataset
@@ -422,10 +435,13 @@ def train_finetune_clf(
                                                             cache=cache,
                                                             shuffle=shuffle,
                                                             mode_display=mode_display)
-    
-    train_ds = train_ds.take(2)
-    test_ds = test_ds.take(1)
-    val_ds = val_ds.take(2)
+    # Reduce size of dataset
+    if train_size is not None:    
+        train_ds = train_ds.take(train_size)
+    if val_size is not None:
+        val_ds = val_ds.take(val_size)
+    if test_size is not None:    
+        test_ds = test_ds.take(test_size)
     # ----------------------------------------------------------------------------
     # Validation sample for tensorboard
     imgs_val, labels_val = next(iter(val_ds))
@@ -440,11 +456,9 @@ def train_finetune_clf(
                                 augmentation_param,
                                 trainable=False,
                                 dropout=dropout)
-
     # ----------------------------------------------------------------------------
     # Callbacks
-    now = datetime.datetime.now().strftime("%Y%m%d-%H%M")
-    callbacks, file_writer_cm = get_callbacks(log_dir=f'{log_dir}/{now}', 
+    callbacks, file_writer_cm = get_callbacks(log_dir=log_dir, 
                               histogram_freq=histogram_freq, 
                               profile_batch=profile_batch,
                               early_stopping_patience=early_stopping_patience, 
@@ -500,13 +514,15 @@ def train_finetune_clf(
     # Contain only model's weights
     ckpt_path_file = os.path.join(ckpt_path, 'ckpt-{epoch:04d}.ckpt')
     model.save_weights(ckpt_path_file.format(epoch=0))
-
+    # ----------------------------------------------------------------------------
+    # Copy config file    
+    if config_file is not None:
+        shutil.copyfile(config_file, os.path.join(log_dir, 'config.yaml'))
     # ----------------------------------------------------------------------------    
     # Compile the model
     model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=base_learning_rate),
                     loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                     metrics=metrics)
-
     # ----------------------------------------------------------------------------
     # Train the model: Only train the top layers
     loss0, accuracy0 = model.evaluate(val_ds)
@@ -517,7 +533,6 @@ def train_finetune_clf(
                         epochs=initial_epochs,
                         validation_data=val_ds,
                         callbacks=callbacks)
-
     # ----------------------------------------------------------------------------
     # Plot results
     acc = history.history['accuracy']
@@ -545,7 +560,6 @@ def train_finetune_clf(
                                     epochs=total_epochs,
                                     initial_epoch=history.epoch[-1],
                                     validation_data=val_ds)
-
         # ---------------------------------------------
         # Plot results
         acc += history_fine.history['accuracy']
@@ -558,21 +572,22 @@ def train_finetune_clf(
         #plt.plot([initial_epochs-1,initial_epochs-1], plt.ylim(), label='Start Fine Tuning')
 
         history = history_fine
-
     # ---------------------------------------------
     # Evaluate the model
     test_loss, test_acc = evaluate_model(model, test_ds, class_names)
     # ---------------------------------------------
-    # Save the model weights
-    model.save_weights(os.path.join(path_save_model, 'final_weights'))
+    try:
+        # Save the model weights
+        model.save_weights(os.path.join(path_save_model, 'final_weights'))
 
-    # Save the entire model as a keras or legacy (SavedModel, HDF5)
-    # tf.keras.models.load_model('my_model.keras')
-    model.save(os.path.join(path_save_model, 'final_model.keras'))
+        # Save the entire model as a keras or legacy (SavedModel, HDF5)
+        # tf.keras.models.load_model('my_model.keras')
+        model.save(os.path.join(path_save_model, 'final_model.keras'))
+    except:
+        print('Error saving model!')
     # ---------------------------------------------
     # Save history
     with open(os.path.join(path_save_model, 'train_history'), 'wb') as f:        
         pickle.dump(history.history, f)
-    # ---------------------------------------------
 
     return model, history, test_loss, test_acc

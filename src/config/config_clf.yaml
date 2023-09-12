@@ -1,11 +1,12 @@
 # Configuration file for the classifier experiment
 
 project:
-  name: &project_name covid_xray_clf
-
-model:
-  base_model_name: xception
-  name_acronym: &model_name xcept
+  name: &project_name cov-xray-clf
+  experiment: &experiment_name comp-models
+    
+model: 
+  base_model_name: resnet50 #vgg19 xception inception_v3 resnet50 mobilenet_v2
+  name_acronym: &model_name resnet50
   dropout: 0.2
   num_channels: 3
   path_save: !join [results/models, /, *model_name]
@@ -30,9 +31,12 @@ data:
   img_height: 299
   img_width: 299
   color: grayscale
-  cache: False
+  cache: True
   prefetch: True
   shuffle: 1000
+  train_size:
+  val_size:
+  test_size:
 
 train:
   # Parameters
@@ -42,12 +46,13 @@ train:
   loss: categorical_crossentropy
   metrics: 
   - 'accuracy'
-  epochs: 70
+  epochs: 100
   fine_tune_at_perc: 0    # Default: 0, no fine-tuning
-  epochs_finetune: 30
+  epochs_finetune: 0
   lr_finetune: 0.00001
   mode_display: False
 
+# Tracking with Tensorboard
 tb:
   # Tensorboard logs
   log_dir: !join [results/tb_logs, '/', *model_name]
@@ -69,12 +74,17 @@ tb:
     patience: 5
     min_lr: 0.000001   
 
+# Tracking with MLflow
+mlflow: 
+  tracking: True
+  experiment_id: 106509478894241821
+  experiment_name: !join [*project_name, '_', *experiment_name]
+  run_name: *model_name
+  nested_run: False
+
 general:
   display: True
   ai_framework: tf
 
-runs:
-  description:
-  name: !join [ 'results/runs' , '_', *model_name ]
 
   
