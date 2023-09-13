@@ -27,7 +27,8 @@ print(f'Config file: {args.config}')
 param = load_config(args.config)
 #----------------------------------------------
 # Rewrite parameters (for tests and hyperparameter tuning)
-param['data']['path'] = '../../../Data/COVID-19_CXR_Dataset_final'
+param['data']['train_path'] = '../../../Data/COVID-19_CXR_Dataset_final_train'
+param['data']['test_path'] = '../../../Data/COVID-19_CXR_Dataset_final_test'
 
 if debug_mode:
     param = set_params_debug(param)
@@ -45,7 +46,9 @@ if __name__ == "__main__":
     # Train and fine-tune a classifier model
     model, history, test_loss, test_acc = train_finetune_clf(
             # Data
-            data_dir=param['data']['path'],
+            train_dir=param['data']['train_path'],
+            test_dir=param['data']['test_path'],
+            val_dir=param['data']['val_path'],
             img_height=param['data']['img_height'],
             img_width=param['data']['img_width'],
             batch_size=param['train']['batch_size'],

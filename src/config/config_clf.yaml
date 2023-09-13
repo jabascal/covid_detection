@@ -16,10 +16,12 @@ model:
 #   Sultana A et al. A Real Time Method for Distinguishing COVID-19 Utilizing 2D-CNN 
 #   and Transfer Learning. Sensors. 2023; 23(9):4458. https://doi.org/10.3390/s23094458 
 data:
-  path: ../../Data/COVID-19_CXR_Dataset_final
+  train_path: ../../Data/COVID-19_CXR_Dataset_final_train
+  test_path: ../../Data/COVID-19_CXR_Dataset_final_test
+  val_path: 
   url: https://drive.google.com/drive/folders/1RxA5TvT9OGS-3zURbzBiUoRJzT-9zd9L?usp=sharing
-  val_split: 0.2
-  test_split: 2
+  val_split: 0.1
+  test_split: 
   augmentation:
     rotation: 0.2
     flip: 'horizontal'
@@ -77,7 +79,7 @@ tb:
 # Tracking with MLflow
 mlflow: 
   tracking: True
-  experiment_id: 106509478894241821
+  experiment_id: #106509478894241821
   experiment_name: !join [*project_name, '_', *experiment_name]
   run_name: *model_name
   nested_run: False

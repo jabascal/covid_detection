@@ -178,13 +178,15 @@ def get_prediction_batch(model: tf.keras.Model,
     score = [score[i, class_idx[i]].numpy() for i in range(len(class_idx))]
     return pred_name, score
 
-def create_dataset(data_dir: str,
+def create_dataset(train_dir: str,
                    img_width: int,
                    img_height: int,
                    batch_size: int,
-                   validation_split: float,
-                   test_split: int,
                    color_mode: str,
+                   validation_split: float=0.2,
+                   test_split: int=2,
+                   val_dir: str=None,
+                   test_dir: str=None,
                    cache: bool=False,
                    shuffle: bool=True,
                    mode_display: bool=False):
@@ -194,16 +196,39 @@ def create_dataset(data_dir: str,
 
     # Create data set 
     # Split in training and validation batched dataset
-    train_ds, val_ds = tf.keras.utils.image_dataset_from_directory(
-        data_dir,
-        validation_split=validation_split,
-        seed=123,
-        shuffle=True,
-        subset="both",
-        color_mode=color_mode,
-        image_size=(img_width, img_height),
-        batch_size=batch_size,
-    )
+    if val_dir is None:
+        # Split train into train and validation
+        train_ds, val_ds = tf.keras.utils.image_dataset_from_directory(
+            train_dir,
+            validation_split=validation_split,
+            seed=123,
+            shuffle=True,
+            subset="both",
+            color_mode=color_mode,
+            image_size=(img_width, img_height),
+            batch_size=batch_size,
+        )
+    else:
+        # Validation dataset
+        val_ds = tf.keras.utils.image_dataset_from_directory(
+            val_dir,
+            shuffle=True,
+            seed=123,
+            color_mode=color_mode,
+            image_size=(img_width, img_height),
+            batch_size=batch_size,
+        )
+        # Training dataset
+        train_ds = tf.keras.utils.image_dataset_from_directory(
+            train_dir,
+            validation_split=validation_split,
+            seed=123,
+            shuffle=True,
+            subset="training",
+            color_mode=color_mode,
+            image_size=(img_width, img_height),
+            batch_size=batch_size,
+        )
 
     class_names = train_ds.class_names
     print(f"Classes: {class_names}")
@@ -219,9 +244,21 @@ def create_dataset(data_dir: str,
                                     imgs_titles=labels_names[:num_images]) 
 
     # Test dataset
-    val_ds_len = tf.data.experimental.cardinality(val_ds)
-    test_ds = val_ds.take(val_ds_len // test_split)
-    val_ds = val_ds.skip(val_ds_len // test_split)
+    if test_dir is None:
+        # Split validation into validation and test
+        val_ds_len = tf.data.experimental.cardinality(val_ds)
+        test_ds = val_ds.take(val_ds_len // test_split)
+        val_ds = val_ds.skip(val_ds_len // test_split)
+    else:
+        # Test dataset
+        test_ds = tf.keras.utils.image_dataset_from_directory(
+            test_dir,
+            shuffle=True,
+            seed=123,
+            color_mode=color_mode,
+            image_size=(img_width, img_height),
+            batch_size=batch_size,
+        )
 
     print(f"Number of training batches: {tf.data.experimental.cardinality(train_ds)}")
     print(f"Number of validation batches: {tf.data.experimental.cardinality(val_ds)}")
@@ -360,10 +397,12 @@ def get_callbacks(
 
 def train_finetune_clf(
                         # Data
-                        data_dir: str,
+                        train_dir: str,
                         img_width: int,
                         img_height: int,
                         batch_size: int,
+                        test_dir: str = None,
+                        val_dir: str = None,
                         validation_split: float = 0.2,   # Percentage
                         test_split: int = 2,             # Ratio
                         color_mode: str = "grayscale",   # Images: "grayscale", "rgb" 
@@ -425,13 +464,15 @@ def train_finetune_clf(
     # ----------------------------------------------------------------------------
     # Create data set 
     # Split in training and validation batched dataset
-    train_ds, val_ds, test_ds, class_names = create_dataset(data_dir,
+    train_ds, val_ds, test_ds, class_names = create_dataset(train_dir,
                                                             img_width,
                                                             img_height,
                                                             batch_size,
+                                                            color_mode,
                                                             validation_split,
                                                             test_split,
-                                                            color_mode,
+                                                            val_dir,
+                                                            test_dir,
                                                             cache=cache,
                                                             shuffle=shuffle,
                                                             mode_display=mode_display)
