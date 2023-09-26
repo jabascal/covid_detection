@@ -11,6 +11,7 @@ from tensorflow.python.client import device_lib
 
 from utils.helper_plot import plot_grid_images_from_array
 from utils.helper_plot import plot_loss_acc, plot_confusion_matrix
+from utils.helper_mlflow import save_model_mlflow, log_figure_mlflow
 
 def get_prep_input_layer(model_name: str) -> tf.keras.layers:
     """Get the preprocess input layer for a given model name."""
@@ -355,12 +356,14 @@ def get_callbacks(
                                         histogram_freq=histogram_freq,
                                         write_graph=True,
                                         write_images=True,
-                                        profile_batch=profile_batch,)
+                                        profile_batch=profile_batch,
+                                        update_freq='epoch')
     callbacks = [tb_cb]
 
     # Early stopping
     if early_stopping_patience > 0:
-        early_stop_cb = tf.keras.callbacks.EarlyStopping(monitor=early_stopping_monitor, patience=early_stopping_patience)
+        early_stop_cb = tf.keras.callbacks.EarlyStopping(monitor=early_stopping_monitor, 
+                                                         patience=early_stopping_patience)
         callbacks.append(early_stop_cb)
 
     # Checkpoint
@@ -450,6 +453,9 @@ def train_finetune_clf(
                         #
                         # Config file
                         config_file: str = None,
+                        #
+                        # mlflow
+                        mlflow_exp: bool = False,
     ):
     """Train and fine-tune a classifier model."""
 
@@ -464,6 +470,7 @@ def train_finetune_clf(
     # ----------------------------------------------------------------------------
     # Create data set 
     # Split in training and validation batched dataset
+    print("Creating datasets ...")
     train_ds, val_ds, test_ds, class_names = create_dataset(train_dir,
                                                             img_width,
                                                             img_height,
@@ -490,6 +497,7 @@ def train_finetune_clf(
     names_val = [class_names[i] for i in labels_val.numpy()]
     # ----------------------------------------------------------------------------
     # Create the model
+    print("Creating model ...")
     img_shape = (img_height, img_width, model_num_channels) # Color for model trained on RGB images
     model, base_model = get_model_from_base(base_model_name,
                                 img_shape,
@@ -528,6 +536,7 @@ def train_finetune_clf(
         names_titles = [f"True: {names_val},\n Pred: {names_pred[i]},\nScore: {pred_scores[i]:.1f} " for i in range(len(names_val))]
         figure = plot_grid_images_from_array(imgs_val_np, names_titles, vmin=0, vmax=1)
     """
+
     def log_confusion_matrix(epoch, logs):
         # Use the model to predict the values from the validation dataset.
         pred_names, pred_scores = get_prediction_batch(model, imgs_val, class_names)
@@ -570,6 +579,7 @@ def train_finetune_clf(
     print(f"Initial loss: {loss0:.2f}")
     print(f"Initial accuracy: {accuracy0:.2f}")
 
+    print("Training the model ...")
     history = model.fit(train_ds,
                         epochs=initial_epochs,
                         validation_data=val_ds,
@@ -588,6 +598,7 @@ def train_finetune_clf(
     base_model_num = len(base_model.layers)
     fine_tune_at = int(base_model_num*fine_tune_at_perc)
     if fine_tune_at > 0:
+        print(f"Fine tuning from layer {fine_tune_at} onwards ...")
         base_model, model = unfreeze_model(base_model, model, fine_tune_at)
 
         # Compile the model
@@ -615,6 +626,7 @@ def train_finetune_clf(
         history = history_fine
     # ---------------------------------------------
     # Evaluate the model
+    print("Evaluating the model ...")
     test_loss, test_acc = evaluate_model(model, test_ds, class_names)
     # ---------------------------------------------
     try:
@@ -630,5 +642,22 @@ def train_finetune_clf(
     # Save history
     with open(os.path.join(path_save_model, 'train_history'), 'wb') as f:        
         pickle.dump(history.history, f)
+    # ---------------------------------------------
+    # Evaluate the model
+    # Use the model to predict the values from the validation dataset.
+    pred_names, pred_scores = get_prediction_batch(model, imgs_val, class_names)
+    imgs_titles = [f"True: {names_val[i]},\n Pred: {pred_names[i]},\n Score: {pred_scores[i]:.1f} " for i in range(len(names_val))]
+
+    # Confusion matrix.
+    cm = sklearn.metrics.confusion_matrix(names_val, pred_names)
+    fig_conf = plot_confusion_matrix(cm, class_names=class_names)
+
+    # Prediction sample
+    fig_pred = plot_grid_images_from_array(imgs_val_np, imgs_titles, vmin=0, vmax=1)
+
+    # Log figures in mlflow
+    if mlflow_exp:
+        log_figure_mlflow(fig_pred, 'figures/pred_img.png')
+        log_figure_mlflow(fig_conf, 'figures/confmat_img.png')
 
     return model, history, test_loss, test_acc

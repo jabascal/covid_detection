@@ -22,9 +22,16 @@ def load_config(config_file):
     return param
 
 def set_params_debug(param):
+    param['mlflow']['experiment_id'] = None
+    param['mlflow']['experiment_name'] = "debug"
+    #
     param['data']['cache'] = False
     param['data']['train_size'] = 2
     param['data']['val_size'] = 2
     param['data']['test_size'] = 2    
-    param['train']['epochs'] = 2    
+    param['data']['img_height'] = 64
+    param['data']['img_width'] = 64
+    #
+    param['train']['epochs'] = 15    
+    param['train']['batch_size'] = 16    
     return param

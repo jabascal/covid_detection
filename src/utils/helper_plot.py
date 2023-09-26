@@ -11,7 +11,7 @@ def plot_grid_images_from_file(files:list,
     for i, file in enumerate(files[:n_images]):
         ax = plt.subplot(3, 3, i + 1)
         img = PIL.Image.open(file)
-        print(f"Image shape: {img.size}")
+        #print(f"Image shape: {img.size}")
         plt.imshow(img, cmap='gray', vmin=0, vmax=255)
 
 def plot_grid_images_from_array(imgs:np.ndarray,                                  
@@ -22,13 +22,14 @@ def plot_grid_images_from_array(imgs:np.ndarray,
                                 figsize:tuple=(10, 10)):
     """Plot grid of images from ndarray"""
     num_images = min(9, len(imgs))
-    plt.figure(figsize=figsize)
+    fig = plt.figure(figsize=figsize)
     for i in range(num_images):
-        print(f"Image shape: {imgs[i].shape}")
+        #print(f"Image shape: {imgs[i].shape}")
         ax = plt.subplot(3, 3, i + 1)
         plt.imshow(imgs[i], cmap=cmap, vmin=vmin, vmax=vmax)
         plt.title(imgs_titles[i])
         plt.colorbar()
+    return fig
 
 
 def plot_histogram(values:list, 

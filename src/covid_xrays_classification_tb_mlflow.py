@@ -12,7 +12,7 @@ from utils.helper_mlflow import set_mlflow, stop_mlflow
 random.seed(123)
 
 # Debug mode
-debug_mode = True
+debug_mode = False
 
 # ---------------------------------------------
 # Parse config file
@@ -58,6 +58,9 @@ if __name__ == "__main__":
             augmentation_param=param['data']['augmentation'],
             cache=param['data']['cache'],
             shuffle=param['data']['shuffle'],
+            train_size=param['data']['train_size'],
+            val_size=param['data']['val_size'],
+            test_size=param['data']['test_size'],
             # Model
             base_model_name=param['model']['base_model_name'],
             model_num_channels=param['model']['num_channels'],
@@ -88,8 +91,13 @@ if __name__ == "__main__":
             reduce_lr_patience=param['tb']['reduce_lr']['patience'],
             reduce_lr_min=param['tb']['reduce_lr']['min_lr'],
             # Config file
-            config_file = args.config,
+            config_file=args.config,
+            # mlflow
+            mlflow_exp=param['mlflow']['tracking']
     )
+    # ---------------------------------------------
+    # Save model artifact for MLflow
+    #mlflow.tensorflow.log_model(model, "model")
 
     # ---------------------------------------------
     # Stop mlflow
