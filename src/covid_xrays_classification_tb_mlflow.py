@@ -32,6 +32,15 @@ param['data']['test_path'] = '../../../Data/COVID-19_CXR_Dataset_final_test'
 
 if debug_mode:
     param = set_params_debug(param)
+
+# Rewrite parameters for current run
+if False:
+    param['train']['continue_training'] = True
+    param['data']['cache'] = False
+    param['data']['train_size'] = 2
+    param['data']['val_size'] = 2
+    param['data']['test_size'] = 2    
+
 # ---------------------------------------------
 # Train and fine-tune a classifier model
 if __name__ == "__main__":
@@ -67,6 +76,7 @@ if __name__ == "__main__":
             dropout=param['model']['dropout'],
             path_save_model=param['model']['path_save'],
             # Train
+            continue_training=param['train']['continue_training'],
             initial_epochs=param['train']['epochs'],
             fine_tune_at_perc=param['train']['fine_tune_at_perc'],
             base_learning_rate=param['train']['lr'],
@@ -93,7 +103,8 @@ if __name__ == "__main__":
             # Config file
             config_file=args.config,
             # mlflow
-            mlflow_exp=param['mlflow']['tracking']
+            mlflow_exp=param['mlflow']['tracking'],
+            path_model_prev=param['mlflow']['path_model_prev'],
     )
     # ---------------------------------------------
     # Save model artifact for MLflow

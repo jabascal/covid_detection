@@ -367,10 +367,10 @@ def get_callbacks(
         callbacks.append(early_stop_cb)
 
     # Checkpoint
-    ckpt_path_file = os.path.join(ckpt_path, 'ckpt-{epoch:04d}.ckpt')
+    # ckpt_path_file = os.path.join(ckpt_path, 'ckpt-{epoch:04d}.ckpt')
     if ckpt_freq > 0:            
         checkpoint_cb = tf.keras.callbacks.ModelCheckpoint(
-            filepath=ckpt_path_file,
+            filepath=ckpt_path,
             verbose=1,
             save_weights_only=True,
             monitor=ckpt_monitor,
@@ -383,7 +383,8 @@ def get_callbacks(
         reduce_lr_cb = tf.keras.callbacks.ReduceLROnPlateau(monitor=reduce_lr_monitor, 
                                                             factor=reduce_lr_factor,
                                                             patience=reduce_lr_patience, 
-                                                            min_lr=reduce_lr_min)
+                                                            min_lr=reduce_lr_min,
+                                                            verbose=1)
         callbacks.append(reduce_lr_cb)
 
     # Predict (Denoised) an image every epoch to visualize in tensorboard
@@ -423,12 +424,13 @@ def train_finetune_clf(
                         path_save_model: str = 'models',
                         #
                         # Train
+                        continue_training: bool = False,
                         initial_epochs: int = 20,        # Train the top layers for this number of epochs
                         fine_tune_at_perc: int = 0.75,         # Fine-tune from this layer onwards (in percentage)
                         base_learning_rate: float = 0.0001,
                         fine_tune_epochs: int = 10,
                         ft_learning_rate: float = 0.00001,
-                        metrics: list = ['accuracy'],
+                        metrics: list = ['accuracy'],                        
                         mode_display: bool=False,
                         #
                         # TensorBoard
@@ -456,6 +458,7 @@ def train_finetune_clf(
                         #
                         # mlflow
                         mlflow_exp: bool = False,
+                        path_model_prev: str = None,
     ):
     """Train and fine-tune a classifier model."""
 
@@ -574,6 +577,12 @@ def train_finetune_clf(
                     loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                     metrics=metrics)
     # ----------------------------------------------------------------------------
+    # Load previous model
+    if continue_training and path_model_prev is not None:
+        print(f"Loading previous model from {path_model_prev} ...")
+        #model.load_weights(path_model_prev)
+        model = tf.keras.models.load_model(path_model_prev)
+    # ----------------------------------------------------------------------------
     # Train the model: Only train the top layers
     loss0, accuracy0 = model.evaluate(val_ds)
     print(f"Initial loss: {loss0:.2f}")
@@ -592,7 +601,7 @@ def train_finetune_clf(
     loss = history.history['loss']
     val_loss = history.history['val_loss']
 
-    plot_loss_acc(loss, val_loss, acc, val_acc)
+    fig_met = plot_loss_acc(loss, val_loss, acc, val_acc)
     ##########################################
     # Fine tuning
     base_model_num = len(base_model.layers)
@@ -620,7 +629,7 @@ def train_finetune_clf(
         loss += history_fine.history['loss']
         val_loss += history_fine.history['val_loss']
 
-        plot_loss_acc(loss, val_loss, acc, val_acc)
+        fig_met_cont = plot_loss_acc(loss, val_loss, acc, val_acc)
         #plt.plot([initial_epochs-1,initial_epochs-1], plt.ylim(), label='Start Fine Tuning')
 
         history = history_fine
@@ -659,5 +668,6 @@ def train_finetune_clf(
     if mlflow_exp:
         log_figure_mlflow(fig_pred, 'figures/pred_img.png')
         log_figure_mlflow(fig_conf, 'figures/confmat_img.png')
+        log_figure_mlflow(fig_met, 'figures/metrics_img.png')
 
     return model, history, test_loss, test_acc

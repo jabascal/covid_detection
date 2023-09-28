@@ -15,7 +15,7 @@ def set_mlflow(config_file: str=None,
     # mlflow experiments create --experiment-name covid-xrays-clf_comp-methods        
     if not experiment_id:
         try: 
-            # Load if experimùent exist by name
+            # Load if experiment exist by name
             experiment = mlflow.get_experiment_by_name(experiment_name)
             experiment_id = experiment.experiment_id
         except:

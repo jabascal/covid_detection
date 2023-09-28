@@ -5,11 +5,12 @@ project:
   experiment: &experiment_name comp-models
     
 model: 
-  base_model_name: mobilenet_v2 #vgg19 xception inception_v3 resnet50 mobilenet_v2
-  name_acronym: &model_name mobnetv2
+  base_model_name: resnet50 #vgg19 xception inception_v3 resnet50 mobilenet_v2
+  name_acronym: &model_name resnet50
   dropout: 0.2
   num_channels: 3
   path_save: !join [results/models, /, *model_name]
+  path_prev: 
 
 # Data
 # Data take from:
@@ -48,7 +49,8 @@ train:
   loss: categorical_crossentropy
   metrics: 
   - 'accuracy'
-  epochs: 100
+  continue_training: False
+  epochs: 300
   fine_tune_at_perc: 0    # Default: 0, no fine-tuning
   epochs_finetune: 0
   lr_finetune: 0.00001
@@ -58,32 +60,36 @@ train:
 tb:
   # Tensorboard logs
   log_dir: !join [results/tb_logs, '/', *model_name]
-  histogram_freq: 5
+  histogram_freq: 10
   profile_batch: 0
   update_freq: 'epoch'
   # Early stopping
   early_stopping:
     monitor: val_loss
-    patience: 5
+    patience: 10
   # Model checkpoint
   model_ckpt:
-    ckpt_freq: 5
+    ckpt_freq: 10
     ckpt_path: !join [results/ckpts, '/', *model_name]
     ckpt_monitor: val_loss
   # Reduce learning rate
   reduce_lr:
     monitor: val_loss
     factor: 0.2
-    patience: 5
+    patience: 10
     min_lr: 0.000001   
 
 # Tracking with MLflow
 mlflow: 
   tracking: True
-  experiment_id: 733652612987024650
+  # If copy folder, update meta_data.yaml inside the project folder
+  experiment_id: &exp_id 733652612987024650
   experiment_name: !join [*project_name, '_', *experiment_name]
   run_name: *model_name
   nested_run: False
+  run_prev_id: &run_prev_id 5fe3bf90987c4cc4add4892422c628dd
+  path_model_prev: !join ['mlruns/', *exp_id, '/', *run_prev_id, '/artifacts/model/data/model']
+  type_model_prev: saved_model # saved_model, h5, ckpt
 
 general:
   display: True

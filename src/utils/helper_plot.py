@@ -58,7 +58,7 @@ def plot_train_curves_two_figs(fig1_values: list,
                                fig2_loc: str='upper right',
                                xlabel: str='epochs',
                                figsize: tuple=(10, 10)):
-    plt.figure(figsize=figsize)
+    fig = plt.figure(figsize=figsize)
     plt.subplot(2, 1, 1)
     for i, values in enumerate(fig1_values):
         plt.plot(values, label=fig1_legends[i])
@@ -73,10 +73,11 @@ def plot_train_curves_two_figs(fig1_values: list,
     plt.legend(loc=fig2_loc)
     plt.ylabel(fig2_ylabel)
     plt.xlabel(xlabel)
+    return fig
 
 def plot_loss_acc(loss: list, val_loss: list, acc: list, val_acc: list):
     """Plot loss and accuracy"""
-    plot_train_curves_two_figs([acc, val_acc], 
+    fig = plot_train_curves_two_figs([acc, val_acc], 
                             ['Training Accuracy', 'Validation Accuracy'],
                             'Training and Validation Accuracy',
                             'Accuracy',
@@ -84,6 +85,7 @@ def plot_loss_acc(loss: list, val_loss: list, acc: list, val_acc: list):
                             ['Training Loss', 'Validation Loss'],
                             'Training and Validation Loss',
                             'Loss')
+    return fig
 
 def plot_confusion_matrix(cm, class_names):
     """
